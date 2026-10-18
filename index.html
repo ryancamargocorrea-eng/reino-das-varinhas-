@@ -1,0 +1,211 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Reino das Varinhas</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;overflow:hidden;background:#07111b;color:white;font-family:Arial}
+#hud{position:fixed;top:10px;left:10px;z-index:2;background:#101cda88;padding:12px;border-radius:12px}
+#controls{position:fixed;bottom:18px;left:0;right:0;display:flex;justify-content:space-around;align-items:end;z-index:3}
+.pad{display:grid;grid-template-columns:52px 52px 52px;gap:5px}
+button{border:1px solid #a7dfff88;background:#182d55dd;color:white;border-radius:14px;font-size:22px;width:52px;height:52px;touch-action:none}
+#cast{width:100px;height:76px;background:#6428cbee;font-size:16px}
+#message{font-size:13px}
+</style>
+</head>
+<body>
+<div id="hud">
+<b>🪄 REINO DAS VARINHAS</b><br>
+❤️ Vida: <span id="hp">100</span>
+&nbsp; ✨ Mana: <span id="mana">100</span><br>
+👹 Monstros: <span id="count">5</span>
+<div id="message">Derrote todos!</div>
+</div>
+<div id="controls">
+<div class="pad">
+<button data-m="left">←</button>
+<button data-m="up">↑</button>
+<button data-m="right">→</button>
+<span></span><button data-m="down">↓</button><span></span>
+</div>
+<button id="cast">⚡<br>FEITIÇO</button>
+</div>
+<script type="module">
+import * as THREE from
+'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0x101b2c);
+scene.fog=new THREE.Fog(0x101b2c,20,65);
+
+const camera=new THREE.PerspectiveCamera(65,innerWidth/innerHeight,.1,100);
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth,innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));
+renderer.shadowMap.enabled=true;
+document.body.appendChild(renderer.domElement);
+
+scene.add(new THREE.HemisphereLight(0xb9dcff,0x203019,2));
+const sun=new THREE.DirectionalLight(0xffffff,2);
+sun.position.set(8,15,8);scene.add(sun);
+
+const floor=new THREE.Mesh(
+new THREE.PlaneGeometry(100,100),
+new THREE.MeshStandardMaterial({color:0x254b36})
+);
+floor.rotation.x=-Math.PI/2;scene.add(floor);
+
+const grid=new THREE.GridHelper(100,50,0x416b55,0x31513f);
+grid.position.y=.02;scene.add(grid);
+
+// Pedras e árvores
+for(let i=0;i<45;i++){
+let x=Math.random()*70-35,z=Math.random()*70-35;
+if(Math.abs(x)<4&&Math.abs(z)<5)continue;
+let tree=new THREE.Group();
+let trunk=new THREE.Mesh(new THREE.CylinderGeometry(.18,.3,1.5,7),
+new THREE.MeshStandardMaterial({color:0x62422b}));
+trunk.position.y=.75;tree.add(trunk);
+let leaves=new THREE.Mesh(new THREE.ConeGeometry(1.1,2.5,7),
+new THREE.MeshStandardMaterial({color:0x164b38}));
+leaves.position.y=2.5;tree.add(leaves);
+tree.position.set(x,0,z);scene.add(tree);
+}
+
+// Mago
+const player=new THREE.Group();scene.add(player);
+const robe=new THREE.Mesh(new THREE.ConeGeometry(.55,1.5,8),
+new THREE.MeshStandardMaterial({color:0x5634a1}));
+robe.position.y=.85;player.add(robe);
+const head=new THREE.Mesh(new THREE.SphereGeometry(.3,12,10),
+new THREE.MeshStandardMaterial({color:0xf1c49a}));
+head.position.y=1.8;player.add(head);
+const hat=new THREE.Mesh(new THREE.ConeGeometry(.4,.8,8),
+new THREE.MeshStandardMaterial({color:0x21153d}));
+hat.position.y=2.3;player.add(hat);
+const wand=new THREE.Mesh(new THREE.CylinderGeometry(.035,.055,.8,6),
+new THREE.MeshStandardMaterial({color:0xd9a86c,emissive:0x4b2500}));
+wand.rotation.x=Math.PI/2;wand.position.set(.48,1.3,-.2);
+player.add(wand);
+
+// Monstros
+const monsters=[];
+function spawnMonster(x,z){
+let g=new THREE.Group();
+let body=new THREE.Mesh(new THREE.SphereGeometry(.65,12,10),
+new THREE.MeshStandardMaterial({color:0x8b2549,roughness:.8}));
+body.position.y=.7;g.add(body);
+let eyeMat=new THREE.MeshBasicMaterial({color:0xff3333});
+for(let side of [-1,1]){
+let eye=new THREE.Mesh(new THREE.SphereGeometry(.1,8,8),eyeMat);
+eye.position.set(side*.23, .9,-.5);g.add(eye);
+}
+g.position.set(x,0,z);scene.add(g);
+monsters.push({g,hp:50,attack:0});
+}
+for(let i=0;i<5;i++)spawnMonster(Math.random()*14-7, -8-Math.random()*12);
+
+const spells=[];
+function cast(){
+if(gameOver||mana<12)return;
+mana-=12;
+document.getElementById('mana').textContent=Math.floor(mana);
+const orb=new THREE.Mesh(new THREE.SphereGeometry(.22,12,12),
+new THREE.MeshStandardMaterial({
+color:0x54eaff,emissive:0x1688ff,emissiveIntensity:3
+}));
+orb.position.copy(player.position);
+orb.position.y=1.25;
+const dir=new THREE.Vector3(Math.sin(player.rotation.y),0,
+Math.cos(player.rotation.y));
+orb.position.addScaledVector(dir,.8);
+scene.add(orb);spells.push({orb,dir,life:2.5});
+}
+
+let hp=100,mana=100,gameOver=false;
+const keys={};
+document.querySelectorAll('[data-m]').forEach(b=>{
+const k=b.dataset.m;
+b.addEventListener('pointerdown',e=>{e.preventDefault();keys[k]=true;b.setPointerCapture(e.pointerId)});
+b.addEventListener('pointerup',()=>keys[k]=false);
+b.addEventListener('pointercancel',()=>keys[k]=false);
+b.addEventListener('lostpointercapture',()=>keys[k]=false);
+});
+document.getElementById('cast').addEventListener('pointerdown',e=>{
+e.preventDefault();cast();
+});
+
+let last=performance.now();
+function animate(now){
+requestAnimationFrame(animate);
+const dt=Math.min((now-last)/1000,.04);last=now;
+if(!gameOver){
+mana=Math.min(100,mana+5*dt);
+document.getElementById('mana').textContent=Math.floor(mana);
+
+let dx=(keys.right?1:0)-(keys.left?1:0);
+let dz=(keys.down?1:0)-(keys.up?1:0);
+let len=Math.hypot(dx,dz);
+if(len>0){
+dx/=len;dz/=len;
+player.position.x+=dx*5*dt;
+player.position.z+=dz*5*dt;
+player.rotation.y=Math.atan2(dx,dz);
+}
+player.position.x=THREE.MathUtils.clamp(player.position.x,-25,25);
+player.position.z=THREE.MathUtils.clamp(player.position.z,-25,25);
+
+for(let m of monsters){
+let d=new THREE.Vector3().subVectors(player.position,m.g.position);
+let dist=d.length();
+if(dist>1.5){
+d.normalize();m.g.position.addScaledVector(d,1.25*dt);
+m.g.rotation.y=Math.atan2(d.x,d.z);
+}else{
+m.attack-=dt;
+if(m.attack<=0){hp=Math.max(0,hp-8);m.attack=1;}
+}
+}
+document.getElementById('hp').textContent=hp;
+
+for(let i=spells.length-1;i>=0;i--){
+let s=spells[i];s.life-=dt;
+s.orb.position.addScaledVector(s.dir,15*dt);
+let hit=false;
+for(let j=monsters.length-1;j>=0;j--){
+let m=monsters[j];
+if(s.orb.position.distanceTo(
+new THREE.Vector3(m.g.position.x,.8,m.g.position.z))<.95){
+m.hp-=25;hit=true;
+if(m.hp<=0){scene.remove(m.g);monsters.splice(j,1);}
+break;
+}
+}
+if(hit||s.life<=0){scene.remove(s.orb);spells.splice(i,1);}
+}
+document.getElementById('count').textContent=monsters.length;
+if(monsters.length===0){
+gameOver=true;document.getElementById('message').textContent='🏆 Vitória! Reino salvo!';
+}
+if(hp<=0){
+gameOver=true;document.getElementById('message').textContent='💫 Fim de jogo! Atualize para tentar novamente.';
+}
+}
+camera.position.lerp(new THREE.Vector3(
+player.position.x,player.position.y+7,player.position.z+10),.08);
+camera.lookAt(player.position.x,player.position.y+1,player.position.z);
+renderer.render(scene,camera);
+}
+addEventListener('resize',()=>{
+camera.aspect=innerWidth/innerHeight;
+camera.updateProjectionMatrix();
+renderer.setSize(innerWidth,innerHeight);
+});
+animate(performance.now());
+</script>
+</body>
+  </html>
+  
